@@ -1,0 +1,139 @@
+name: Debug VBMeta Patch Tool
+
+on:
+  workflow_dispatch:
+    inputs:
+      vbmeta_url:
+        description: 'VBMeta Image URL (必填)'
+        required: true
+        type: string
+      vbmeta_system_url:
+        description: 'VBMeta System Image URL (选填)'
+        required: false
+        type: string
+
+jobs:
+  debug-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Download and extract vbmeta-disable-verification tool
+      run: |
+        echo "=== 步骤1: 下载并解压工具 ==="
+        wget https://bgithub.xyz/libxzr/vbmeta-disable-verification/releases/download/v1.0/vbmeta-disable-verification.zip
+        unzip vbmeta-disable-verification.zip
+        
+        echo "=== 查找可执行文件 ==="
+        find . -name "vbmeta-disable-verification" -type f | head -10
+        
+        # 复制 x86_64 版本到当前目录
+        if [ -f "./x86_64/vbmeta-disable-verification" ]; then
+          cp ./x86_64/vbmeta-disable-verification ./
+        else
+          # 如果不在 x86_64 目录，尝试找到其他位置
+          cp $(find . -name "vbmeta-disable-verification" -type f | head -1) ./
+        fi
+        
+        chmod +x vbmeta-disable-verification
+        echo "=== 工具信息 ==="
+        file vbmeta-disable-verification
+        ./vbmeta-disable-verification --help || echo "工具没有help选项"
+    
+    - name: Download VBMeta images
+      run: |
+        echo "=== 步骤2: 下载镜像文件 ==="
+        echo "下载 vbmeta.img: ${{ inputs.vbmeta_url }}"
+        wget -O vbmeta.img "${{ inputs.vbmeta_url }}"
+        echo "原始 vbmeta.img 信息:"
+        file vbmeta.img
+        echo "大小: $(du -h vbmeta.img)"
+        
+        if [ -n "${{ inputs.vbmeta_system_url }}" ]; then
+          echo "下载 vbmeta_system.img: ${{ inputs.vbmeta_system_url }}"
+          wget -O vbmeta_system.img "${{ inputs.vbmeta_system_url }}"
+          echo "原始 vbmeta_system.img 信息:"
+          file vbmeta_system.img
+          echo "大小: $(du -h vbmeta_system.img)"
+        else
+          echo "未提供 vbmeta_system_url，跳过下载"
+        fi
+    
+    - name: Patch VBMeta images
+      run: |
+        echo "=== 步骤3: 处理前目录结构 ==="
+        echo "当前工作目录: $(pwd)"
+        echo "完整目录结构:"
+        find . -type f | sort
+        
+        echo "=== 处理镜像文件 ==="
+        echo "处理 vbmeta.img..."
+        ./vbmeta-disable-verification vbmeta.img
+        
+        if [ -f "vbmeta_system.img" ]; then
+          echo "处理 vbmeta_system.img..."
+          ./vbmeta-disable-verification vbmeta_system.img
+        fi
+    
+    - name: Output directory contents for debugging
+      run: |
+        echo "=== 步骤4: 处理后输出目录内容 ==="
+        echo "当前目录: $(pwd)"
+        echo ""
+        
+        echo "=== 所有文件和目录 ==="
+        ls -la
+        
+        echo ""
+        echo "=== 详细文件列表（递归）==="
+        find . -type f | sort | while read file; do
+          if [ -f "$file" ]; then
+            echo "文件: $file"
+            echo "  大小: $(du -h "$file" | cut -f1)"
+            echo "  类型: $(file -b "$file")"
+            echo ""
+          fi
+        done
+        
+        echo ""
+        echo "=== 重点文件信息 ==="
+        for img in vbmeta.img vbmeta_system.img; do
+          if [ -f "$img" ]; then
+            echo "$img 详细信息:"
+            echo "  大小: $(du -h "$img" | cut -f1)"
+            echo "  文件类型: $(file "$img")"
+            echo "  MD5: $(md5sum "$img" | cut -d' ' -f1)"
+            echo "  SHA256: $(sha256sum "$img" | cut -d' ' -f1)"
+            echo ""
+          fi
+        done
+        
+        echo "=== 工具执行文件 ==="
+        if [ -f "vbmeta-disable-verification" ]; then
+          echo "vbmeta-disable-verification:"
+          echo "  大小: $(du -h vbmeta-disable-verification | cut -f1)"
+          echo "  文件类型: $(file vbmeta-disable-verification)"
+          echo ""
+        fi
+        
+        echo "=== 总结 ==="
+        echo "总文件数: $(find . -type f | wc -l)"
+        echo "总目录数: $(find . -type d | wc -l)"
+        echo "总大小: $(du -sh . | cut -f1)"
+        
+        echo ""
+        echo "=== 处理完成 ==="
+        echo "所有操作已完成，目录内容如上所示。"
+    
+    - name: Archive artifacts for debugging (可选)
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: vbmeta-debug-files
+        path: |
+          vbmeta.img
+          vbmeta_system.img
+          vbmeta-disable-verification
+        retention-days: 7
