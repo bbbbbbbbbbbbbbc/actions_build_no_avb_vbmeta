@@ -23,7 +23,7 @@ jobs:
     - name: Download and extract vbmeta-disable-verification tool
       run: |
         echo "=== 步骤1: 下载并解压工具 ==="
-        wget https://bgithub.xyz/libxzr/vbmeta-disable-verification/releases/download/v1.0/vbmeta-disable-verification.zip
+        wget https://github.com/libxzr/vbmeta-disable-verification/releases/download/v1.0/vbmeta-disable-verification.zip
         unzip vbmeta-disable-verification.zip
         
         echo "=== 查找可执行文件 ==="
